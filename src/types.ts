@@ -22,7 +22,7 @@ export interface Workout {
   id: number;
   name: string;
   description: string;
-  scoreType: ScoreType;
+  scoretype: ScoreType;
   scores: {
     [athleteId: number]: Score;
   };
@@ -31,7 +31,7 @@ export interface Workout {
 export interface NewWorkout {
   name: string;
   description: string;
-  scoreType: ScoreType;
+  scoretype: ScoreType;
 }
 
 export type ScoreType = 'time' | 'reps' | 'weight';

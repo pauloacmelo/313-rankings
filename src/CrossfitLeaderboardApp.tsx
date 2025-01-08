@@ -14,7 +14,8 @@ import {
   addWorkout,
   updateScore,
   subscribeToAthletes,
-  subscribeToWorkouts
+  subscribeToWorkouts,
+  updateWorkout
 } from './supabaseClient';
 
 const CrossfitLeaderboardApp = () => {
@@ -25,8 +26,10 @@ const CrossfitLeaderboardApp = () => {
   const [division, setDivision] = useState<DivisionFilter>('All');
   const [showAddAthlete, setShowAddAthlete] = useState(false);
   const [showAddWorkout, setShowAddWorkout] = useState(false);
+  const [showEditWorkout, setShowEditWorkout] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
   const [newAthlete, setNewAthlete] = useState<NewAthlete>({ name: '', division: 'RX', age: '', gender: 'M' });
-  const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoreType: 'time' });
+  const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoretype: 'time' });
   const [loading, setLoading] = useState(true);
 
   // Load data from Supabase
@@ -130,13 +133,35 @@ const CrossfitLeaderboardApp = () => {
       const result = await addWorkout(newWorkout);
       if (result) {
         // Realtime subscription will handle adding to the state
-        setNewWorkout({ name: '', description: '', scoreType: 'time' });
+        setNewWorkout({ name: '', description: '', scoretype: 'time' });
         setShowAddWorkout(false);
         setActiveWorkout(result.id);
       }
     } catch (error) {
       console.error('Error adding workout:', error);
     }
+  };
+
+  // Handle editing a workout
+  const handleEditWorkout = async () => {
+    if (!editingWorkout) return;
+    
+    try {
+      const result = await updateWorkout(editingWorkout);
+      if (result) {
+        // Realtime subscription will handle updating the state
+        setShowEditWorkout(false);
+        setEditingWorkout(null);
+      }
+    } catch (error) {
+      console.error('Error updating workout:', error);
+    }
+  };
+
+  // Handle starting workout edit
+  const startWorkoutEdit = (workout: Workout) => {
+    setEditingWorkout(workout);
+    setShowEditWorkout(true);
   };
 
   // Handle adding or updating a score
@@ -190,7 +215,7 @@ const CrossfitLeaderboardApp = () => {
       if (a.score === '-') return 1;
       if (b.score === '-') return -1;
       
-      if (currentWorkout.scoreType === 'time') {
+      if (currentWorkout.scoretype === 'time') {
         // For time: lower is better
         const timeA = a.score.split(':').reduce((acc: number, val: string) => acc * 60 + parseInt(val), 0);
         const timeB = b.score.split(':').reduce((acc: number, val: string) => acc * 60 + parseInt(val), 0);
@@ -242,8 +267,8 @@ const CrossfitLeaderboardApp = () => {
                 className="p-2 border rounded"
               />
               <select
-                value={newWorkout.scoreType}
-                onChange={(e) => setNewWorkout({...newWorkout, scoreType: e.target.value as 'time' | 'reps' | 'weight'})}
+                value={newWorkout.scoretype}
+                onChange={(e) => setNewWorkout({...newWorkout, scoretype: e.target.value as 'time' | 'reps' | 'weight'})}
                 className="p-2 border rounded"
               >
                 <option value="time">Time (lower is better)</option>
@@ -270,17 +295,27 @@ const CrossfitLeaderboardApp = () => {
         
         <div className="flex overflow-x-auto space-x-2 pb-2">
           {workouts.map(workout => (
-            <button
-              key={workout.id}
-              onClick={() => setActiveWorkout(workout.id)}
-              className={`px-4 py-2 rounded whitespace-nowrap ${
-                activeWorkout === workout.id 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 hover:bg-gray-300'
-              }`}
-            >
-              {workout.name}
-            </button>
+            <div key={workout.id} className="flex items-center space-x-2">
+              <button
+                onClick={() => setActiveWorkout(workout.id)}
+                className={`px-4 py-2 rounded whitespace-nowrap ${
+                  activeWorkout === workout.id 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                {workout.name}
+              </button>
+              <button
+                onClick={() => startWorkoutEdit(workout)}
+                className="p-2 text-gray-600 hover:text-blue-500"
+                title="Edit workout"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -291,16 +326,65 @@ const CrossfitLeaderboardApp = () => {
           <h2 className="text-xl font-semibold mb-2">
             {workouts.find(w => w.id === activeWorkout)?.name}
           </h2>
-          <p className="mb-2">
+          <p className="mb-2 whitespace-pre-wrap">
             {workouts.find(w => w.id === activeWorkout)?.description}
           </p>
           <p className="text-sm text-gray-600">
-            Score type: {workouts.find(w => w.id === activeWorkout)?.scoreType === 'time' 
+            Score type: {workouts.find(w => w.id === activeWorkout)?.scoretype === 'time' 
               ? 'Time (lower is better)' 
-              : workouts.find(w => w.id === activeWorkout)?.scoreType === 'reps'
+              : workouts.find(w => w.id === activeWorkout)?.scoretype === 'reps'
                 ? 'Repetitions (higher is better)'
                 : 'Weight (higher is better)'}
           </p>
+        </div>
+      )}
+      
+      {showEditWorkout && editingWorkout && (
+        <div className="bg-gray-100 p-4 rounded mb-4 mt-4">
+          <h3 className="font-semibold mb-2">Edit Workout</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Workout Name"
+              value={editingWorkout.name}
+              onChange={(e) => setEditingWorkout({...editingWorkout, name: e.target.value})}
+              className="p-2 border rounded"
+            />
+            <select
+              value={editingWorkout.scoretype}
+              onChange={(e) => setEditingWorkout({...editingWorkout, scoretype: e.target.value as 'time' | 'reps' | 'weight'})}
+              className="p-2 border rounded"
+            >
+              <option value="time">Time (lower is better)</option>
+              <option value="reps">Reps (higher is better)</option>
+              <option value="weight">Weight (higher is better)</option>
+            </select>
+          </div>
+          <textarea
+            placeholder="Workout Description"
+            value={editingWorkout.description}
+            onChange={(e) => setEditingWorkout({...editingWorkout, description: e.target.value})}
+            className="p-2 border rounded w-full mb-4"
+            rows={3}
+          />
+          <div className="flex space-x-2">
+            <button 
+              onClick={handleEditWorkout}
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              disabled={!editingWorkout.name}
+            >
+              Save Changes
+            </button>
+            <button 
+              onClick={() => {
+                setShowEditWorkout(false);
+                setEditingWorkout(null);
+              }}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       

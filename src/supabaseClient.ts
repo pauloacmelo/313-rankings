@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Athlete, Workout, Score } from './types';
+import { Athlete, Workout, NewAthlete, NewWorkout, Score } from './types';
 
 // Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -40,7 +40,8 @@ export const addAthlete = async (newAthlete: Omit<Athlete, 'id'>) => {
 export const fetchWorkouts = async () => {
   const { data, error } = await supabase
     .from('workouts')
-    .select('*');
+    .select('*')
+    .order('created_at', { ascending: true });
   
   if (error) {
     console.error('Error fetching workouts:', error);
@@ -50,23 +51,39 @@ export const fetchWorkouts = async () => {
   return data as Workout[];
 };
 
-export const addWorkout = async (newWorkout: Omit<Workout, 'id' | 'scores'>) => {
-  const workoutData = {
-    ...newWorkout,
-    scores: {}
-  };
-  
+export const addWorkout = async (workout: NewWorkout): Promise<Workout | null> => {
   const { data, error } = await supabase
     .from('workouts')
-    .insert([workoutData])
-    .select();
-  
+    .insert([workout])
+    .select()
+    .single();
+
   if (error) {
     console.error('Error adding workout:', error);
     return null;
   }
-  
-  return data[0] as Workout;
+
+  return data;
+};
+
+export const updateWorkout = async (workout: Workout): Promise<Workout | null> => {
+  const { data, error } = await supabase
+    .from('workouts')
+    .update({
+      name: workout.name,
+      description: workout.description,
+      scoretype: workout.scoretype
+    })
+    .eq('id', workout.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating workout:', error);
+    return null;
+  }
+
+  return data;
 };
 
 // Scores API

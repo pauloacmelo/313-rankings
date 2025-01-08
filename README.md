@@ -105,7 +105,7 @@ The application uses two main tables in Supabase:
 - id (serial, primary key)
 - name (text)
 - description (text)
-- scoreType (text: 'time', 'reps', 'weight')
+- scoretype (text: 'time', 'reps', 'weight')
 - scores (jsonb) - A JSON object with athlete IDs as keys and score objects as values
 - created_at (timestamp)
 

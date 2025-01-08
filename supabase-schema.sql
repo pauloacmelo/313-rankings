@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.workouts (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT NOT NULL,
-  scoreType TEXT NOT NULL,
+  scoretype TEXT NOT NULL,
   scores JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -33,7 +33,7 @@ VALUES
   ('Emily Chen', 'Scaled', 'F', 29),
   ('Robert James', 'Masters', 'M', 47);
 
-INSERT INTO public.workouts (name, description, scoreType, scores)
+INSERT INTO public.workouts (name, description, scoretype, scores)
 VALUES 
   (
     'Open 25.1', 
