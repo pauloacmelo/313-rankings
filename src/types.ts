@@ -36,4 +36,5 @@ export interface AthleteWithScore extends Athlete {
 }
 
 // Filter types
-export type DivisionFilter = DivisionType | 'All'; 
+export type DivisionFilter = DivisionType | 'All';
+export type GenderFilter = GenderType | 'All';

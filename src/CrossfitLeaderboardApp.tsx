@@ -5,15 +5,14 @@ import {
   NewAthlete,
   NewWorkout,
   DivisionFilter,
+  GenderFilter,
   AthleteWithScore,
   Score,
-  NewScore
 } from './types';
 import {
   fetchAthletes,
   fetchWorkouts,
   fetchScores,
-  fetchScoresByWorkout,
   addAthlete,
   addWorkout,
   addScore,
@@ -31,6 +30,7 @@ const CrossfitLeaderboardApp = () => {
   const [scores, setScores] = useState<Score[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<number | null | 'all'>(null);
   const [division, setDivision] = useState<DivisionFilter>('All');
+  const [gender, setGender] = useState<GenderFilter>('All');
   const [showAddAthlete, setShowAddAthlete] = useState(false);
   const [showAddWorkout, setShowAddWorkout] = useState(false);
   const [showEditWorkout, setShowEditWorkout] = useState(false);
@@ -216,9 +216,12 @@ const CrossfitLeaderboardApp = () => {
   const calculateRankings = (): AthleteWithScore[] | AthleteWithScore[][] => {
     // If "all" is selected, we'll create an array of rankings for each workout
     if (activeWorkout === 'all') {
-      const filteredAthletes = division === 'All'
-        ? athletes
-        : athletes.filter(a => a.division === division);
+      // Apply both division and gender filters
+      const filteredAthletes = athletes.filter(a => {
+        const divisionMatch = division === 'All' || a.division === division;
+        const genderMatch = gender === 'All' || a.gender === gender;
+        return divisionMatch && genderMatch;
+      });
 
       // Create a map to hold combined scores for each athlete
       const athleteMap = new Map<number, any>();
@@ -265,9 +268,12 @@ const CrossfitLeaderboardApp = () => {
     const currentWorkout = workouts.find(w => w.id === activeWorkout);
     if (!currentWorkout) return [];
 
-    const filteredAthletes = division === 'All'
-      ? athletes
-      : athletes.filter(a => a.division === division);
+    // Apply both division and gender filters
+    const filteredAthletes = athletes.filter(a => {
+      const divisionMatch = division === 'All' || a.division === division;
+      const genderMatch = gender === 'All' || a.gender === gender;
+      return divisionMatch && genderMatch;
+    });
 
     return filteredAthletes.map(athlete => {
       const athleteScore = scores.find(
@@ -425,7 +431,8 @@ const CrossfitLeaderboardApp = () => {
         <div className="mb-6 bg-gray-50 p-4 rounded">
           <h2 className="text-xl font-semibold mb-2">All Workouts Overview</h2>
           <p className="mb-2">
-            Viewing scores across all workouts for {division === 'All' ? 'all divisions' : `the ${division} division`}.
+            Viewing scores across all workouts for {gender === 'All' ? 'all' : gender === 'M' ? 'male' : 'female'} athletes 
+            in {division === 'All' ? 'all divisions' : `the ${division} division`}.
           </p>
         </div>
       )}
@@ -530,31 +537,47 @@ const CrossfitLeaderboardApp = () => {
           </div>
         )}
 
-        <div className="flex space-x-2 mb-4">
-          <button
-            onClick={() => setDivision('All')}
-            className={`px-4 py-2 rounded ${division === 'All' ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setDivision('RX')}
-            className={`px-4 py-2 rounded ${division === 'RX' ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
-          >
-            RX
-          </button>
-          <button
-            onClick={() => setDivision('Scaled')}
-            className={`px-4 py-2 rounded ${division === 'Scaled' ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
-          >
-            Scaled
-          </button>
-          <button
-            onClick={() => setDivision('Masters')}
-            className={`px-4 py-2 rounded ${division === 'Masters' ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
-          >
-            Masters
-          </button>
+        <div className="mb-4">
+          <h3 className="font-medium mb-2">Filters</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+            <div>
+              <label htmlFor="division-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Division
+              </label>
+              <select
+                id="division-filter"
+                value={division}
+                onChange={(e) => setDivision(e.target.value as DivisionFilter)}
+                className="p-2 border rounded w-full"
+              >
+                <option value="All">All Divisions</option>
+                <option value="RX">RX</option>
+                <option value="Scaled">Scaled</option>
+                <option value="Masters">Masters</option>
+                <option value="Teens">Teens</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="gender-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Gender
+              </label>
+              <select
+                id="gender-filter"
+                value={gender}
+                onChange={(e) => setGender(e.target.value as GenderFilter)}
+                className="p-2 border rounded w-full"
+              >
+                <option value="All">All Genders</option>
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 italic">
+            {`Showing ${gender === 'All' ? 'all' : gender === 'M' ? 'male' : 'female'} athletes 
+            in ${division === 'All' ? 'all divisions' : `the ${division} division`}`}
+          </p>
         </div>
       </div>
 
