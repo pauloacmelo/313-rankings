@@ -28,14 +28,12 @@ export type ScoreType = 'time' | 'reps' | 'weight';
 // Score-related types
 export interface Score {
   score: string;
-  isValidated: boolean;
 }
 export type NewScore = Omit<Score, 'id'>;
 
 // Rankings type
 export interface AthleteWithScore extends Athlete {
   score: string;
-  isValidated: boolean;
 }
 
 // Filter types

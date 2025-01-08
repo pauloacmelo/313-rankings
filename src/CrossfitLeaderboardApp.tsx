@@ -167,29 +167,10 @@ const CrossfitLeaderboardApp = () => {
   // Handle adding or updating a score
   const handleScoreSubmit = async (athleteId: number, workoutId: number, score: string) => {
     try {
-      await updateScore(workoutId, athleteId, { score, isValidated: false });
+      await updateScore(workoutId, athleteId, { score });
       // Realtime subscription will handle updating the state
     } catch (error) {
       console.error('Error updating score:', error);
-    }
-  };
-
-  // Handle score validation
-  const toggleScoreValidation = async (athleteId: number, workoutId: number) => {
-    const currentWorkout = workouts.find(w => w.id === workoutId);
-    if (!currentWorkout || !currentWorkout.scores[athleteId]) return;
-
-    const currentScore = currentWorkout.scores[athleteId];
-    const updatedScore = {
-      ...currentScore,
-      isValidated: !currentScore.isValidated
-    };
-
-    try {
-      await updateScore(workoutId, athleteId, updatedScore);
-      // Realtime subscription will handle updating the state
-    } catch (error) {
-      console.error('Error toggling score validation:', error);
     }
   };
 
@@ -217,13 +198,12 @@ const CrossfitLeaderboardApp = () => {
       workouts.forEach(workout => {
         // For each athlete, get their score for this workout
         filteredAthletes.forEach(athlete => {
-          const athleteScore = workout.scores[athlete.id] || { score: '-', isValidated: false };
+          const athleteScore = workout.scores[athlete.id] || { score: '-' };
           const athleteData = athleteMap.get(athlete.id);
 
           if (athleteData) {
             athleteData.workoutScores[workout.id] = {
               score: athleteScore.score,
-              isValidated: athleteScore.isValidated,
               workoutName: workout.name,
               scoretype: workout.scoretype
             };
@@ -249,11 +229,10 @@ const CrossfitLeaderboardApp = () => {
       : athletes.filter(a => a.division === division);
 
     return filteredAthletes.map(athlete => {
-      const athleteScore = currentWorkout.scores[athlete.id] || { score: '-', isValidated: false };
+      const athleteScore = currentWorkout.scores[athlete.id] || { score: '-' };
       return {
         ...athlete,
-        score: athleteScore.score,
-        isValidated: athleteScore.isValidated
+        score: athleteScore.score
       };
     }).sort((a, b) => {
       if (a.score === '-') return 1;
@@ -560,7 +539,7 @@ const CrossfitLeaderboardApp = () => {
                 </thead>
                 <tbody>
                   {(rankings as AthleteWithScore[]).map((athlete, index) => (
-                    <tr key={athlete.id} className={athlete.isValidated ? '' : 'bg-yellow-50'}>
+                    <tr key={athlete.id}>
                       <td className="px-4 py-2 border text-center">{index + 1}</td>
                       <td className="px-4 py-2 border">
                         {athlete.name}
@@ -584,18 +563,6 @@ const CrossfitLeaderboardApp = () => {
                           >
                             {athlete.score === '-' ? 'Add Score' : 'Update'}
                           </button>
-                          {athlete.score !== '-' && (
-                            <button
-                              onClick={() => toggleScoreValidation(athlete.id, activeWorkout as number)}
-                              className={`px-2 py-1 rounded text-sm ${
-                                athlete.isValidated
-                                  ? 'bg-green-500 text-white hover:bg-green-600'
-                                  : 'bg-yellow-500 text-white hover:bg-yellow-600'
-                                }`}
-                            >
-                              {athlete.isValidated ? 'Validated' : 'Validate'}
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -625,11 +592,11 @@ const CrossfitLeaderboardApp = () => {
                       </td>
                       <td className="px-4 py-2 border text-center">{athlete.division}</td>
                       {workouts.map(workout => {
-                        const score = athlete.scores[workout.id] || { score: '-', isValidated: false };
+                        const score = athlete.scores[workout.id] || { score: '-' };
                         return (
                           <td
                             key={workout.id}
-                            className={`px-4 py-2 border text-center ${score.isValidated ? '' : 'bg-yellow-50'}`}
+                            className="px-4 py-2 border text-center"
                           >
                             <div className="font-semibold">{score.score}</div>
                             <div className="flex justify-center space-x-2 mt-1">
@@ -645,17 +612,6 @@ const CrossfitLeaderboardApp = () => {
                               >
                                 {score.score === '-' ? 'Add' : 'Edit'}
                               </button>
-                              {score.score !== '-' && (
-                                <button
-                                  onClick={() => toggleScoreValidation(athlete.id, workout.id)}
-                                  className={`px-2 py-1 rounded text-xs ${score.isValidated
-                                      ? 'bg-green-500 text-white hover:bg-green-600'
-                                      : 'bg-yellow-500 text-white hover:bg-yellow-600'
-                                    }`}
-                                >
-                                  {score.isValidated ? 'V' : '!'}
-                                </button>
-                              )}
                             </div>
                           </td>
                         );
