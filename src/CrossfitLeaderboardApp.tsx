@@ -29,7 +29,7 @@ const CrossfitLeaderboardApp = () => {
   const [showEditWorkout, setShowEditWorkout] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
   const [newAthlete, setNewAthlete] = useState<NewAthlete>({ name: '', division: 'RX', age: '', gender: 'M' });
-  const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoretype: 'time' });
+  const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoretype: 'time', scores: [] });
   const [loading, setLoading] = useState(true);
 
   // Load data from Supabase
@@ -113,7 +113,7 @@ const CrossfitLeaderboardApp = () => {
       // Parse age to number if it's a valid number
       const parsedAthlete = {
         ...newAthlete,
-        age: newAthlete.age ? parseInt(newAthlete.age) : 0
+        age: newAthlete.age ? parseInt(String(newAthlete.age)) : 0
       };
       
       const result = await addAthlete(parsedAthlete);
@@ -133,7 +133,7 @@ const CrossfitLeaderboardApp = () => {
       const result = await addWorkout(newWorkout);
       if (result) {
         // Realtime subscription will handle adding to the state
-        setNewWorkout({ name: '', description: '', scoretype: 'time' });
+        setNewWorkout({ name: '', description: '', scoretype: 'time', scores: [] });
         setShowAddWorkout(false);
         setActiveWorkout(result.id);
       }

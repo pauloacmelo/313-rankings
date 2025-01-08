@@ -22,7 +22,7 @@ export const fetchAthletes = async () => {
   return data as Athlete[];
 };
 
-export const addAthlete = async (newAthlete: Omit<Athlete, 'id'>) => {
+export const addAthlete = async (newAthlete: NewAthlete) => {
   const { data, error } = await supabase
     .from('athletes')
     .insert([newAthlete])

@@ -6,13 +6,7 @@ export interface Athlete {
   gender: GenderType;
   age: number | string;
 }
-
-export interface NewAthlete {
-  name: string;
-  division: DivisionType;
-  gender: GenderType;
-  age: string;
-}
+export type NewAthlete = Omit<Athlete, 'id'>;
 
 export type GenderType = 'M' | 'F';
 export type DivisionType = 'RX' | 'Scaled' | 'Masters' | 'Teens';
@@ -27,12 +21,7 @@ export interface Workout {
     [athleteId: number]: Score;
   };
 }
-
-export interface NewWorkout {
-  name: string;
-  description: string;
-  scoretype: ScoreType;
-}
+export type NewWorkout = Omit<Workout, 'id'>;
 
 export type ScoreType = 'time' | 'reps' | 'weight';
 
@@ -41,13 +30,7 @@ export interface Score {
   score: string;
   isValidated: boolean;
 }
-
-export interface NewScore {
-  athleteId: string | number;
-  workoutId: string | number;
-  score: string;
-  isValidated: boolean;
-}
+export type NewScore = Omit<Score, 'id'>;
 
 // Rankings type
 export interface AthleteWithScore extends Athlete {
