@@ -22,7 +22,7 @@ const CrossfitLeaderboardApp = () => {
   // State management
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [activeWorkout, setActiveWorkout] = useState<number | null>(null);
+  const [activeWorkout, setActiveWorkout] = useState<number | null | 'all'>(null);
   const [division, setDivision] = useState<DivisionFilter>('All');
   const [showAddAthlete, setShowAddAthlete] = useState(false);
   const [showAddWorkout, setShowAddWorkout] = useState(false);
@@ -36,15 +36,15 @@ const CrossfitLeaderboardApp = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      
+
       try {
         // Fetch athletes and workouts
         const athletesData = await fetchAthletes();
         const workoutsData = await fetchWorkouts();
-        
+
         setAthletes(athletesData);
         setWorkouts(workoutsData);
-        
+
         // Set active workout to the first one if available
         if (workoutsData.length > 0 && !activeWorkout) {
           setActiveWorkout(workoutsData[0].id);
@@ -55,26 +55,26 @@ const CrossfitLeaderboardApp = () => {
         setLoading(false);
       }
     };
-    
+
     loadData();
-    
+
     // Set up realtime subscriptions
     const athletesSubscription = subscribeToAthletes((payload) => {
       if (payload.eventType === 'INSERT') {
         setAthletes(prevAthletes => [...prevAthletes, payload.new as Athlete]);
       } else if (payload.eventType === 'UPDATE') {
-        setAthletes(prevAthletes => 
-          prevAthletes.map(athlete => 
+        setAthletes(prevAthletes =>
+          prevAthletes.map(athlete =>
             athlete.id === payload.new.id ? payload.new as Athlete : athlete
           )
         );
       } else if (payload.eventType === 'DELETE') {
-        setAthletes(prevAthletes => 
+        setAthletes(prevAthletes =>
           prevAthletes.filter(athlete => athlete.id !== payload.old.id)
         );
       }
     });
-    
+
     const workoutsSubscription = subscribeToWorkouts((payload) => {
       if (payload.eventType === 'INSERT') {
         setWorkouts(prevWorkouts => [...prevWorkouts, payload.new as Workout]);
@@ -83,13 +83,13 @@ const CrossfitLeaderboardApp = () => {
           setActiveWorkout(payload.new.id);
         }
       } else if (payload.eventType === 'UPDATE') {
-        setWorkouts(prevWorkouts => 
-          prevWorkouts.map(workout => 
+        setWorkouts(prevWorkouts =>
+          prevWorkouts.map(workout =>
             workout.id === payload.new.id ? payload.new as Workout : workout
           )
         );
       } else if (payload.eventType === 'DELETE') {
-        setWorkouts(prevWorkouts => 
+        setWorkouts(prevWorkouts =>
           prevWorkouts.filter(workout => workout.id !== payload.old.id)
         );
         // If active workout was deleted, set first available as active
@@ -99,7 +99,7 @@ const CrossfitLeaderboardApp = () => {
         }
       }
     });
-    
+
     // Clean up subscriptions
     return () => {
       athletesSubscription.unsubscribe();
@@ -115,7 +115,7 @@ const CrossfitLeaderboardApp = () => {
         ...newAthlete,
         age: newAthlete.age ? parseInt(String(newAthlete.age)) : 0
       };
-      
+
       const result = await addAthlete(parsedAthlete);
       if (result) {
         // Realtime subscription will handle adding to the state
@@ -145,7 +145,7 @@ const CrossfitLeaderboardApp = () => {
   // Handle editing a workout
   const handleEditWorkout = async () => {
     if (!editingWorkout) return;
-    
+
     try {
       const result = await updateWorkout(editingWorkout);
       if (result) {
@@ -178,13 +178,13 @@ const CrossfitLeaderboardApp = () => {
   const toggleScoreValidation = async (athleteId: number, workoutId: number) => {
     const currentWorkout = workouts.find(w => w.id === workoutId);
     if (!currentWorkout || !currentWorkout.scores[athleteId]) return;
-    
+
     const currentScore = currentWorkout.scores[athleteId];
     const updatedScore = {
       ...currentScore,
       isValidated: !currentScore.isValidated
     };
-    
+
     try {
       await updateScore(workoutId, athleteId, updatedScore);
       // Realtime subscription will handle updating the state
@@ -194,16 +194,60 @@ const CrossfitLeaderboardApp = () => {
   };
 
   // Calculate rankings for the current workout
-  const calculateRankings = (): AthleteWithScore[] => {
-    if (!activeWorkout) return [];
-    
+  const calculateRankings = (): AthleteWithScore[] | AthleteWithScore[][] => {
+    // If "all" is selected, we'll create an array of rankings for each workout
+    if (activeWorkout === 'all') {
+      const filteredAthletes = division === 'All'
+        ? athletes
+        : athletes.filter(a => a.division === division);
+
+      // Create a map to hold combined scores for each athlete
+      const athleteMap = new Map<number, any>();
+
+      // Initialize athlete map with base athlete info
+      filteredAthletes.forEach(athlete => {
+        athleteMap.set(athlete.id, {
+          ...athlete,
+          workoutScores: {},
+          totalRanking: 0
+        });
+      });
+
+      // For each workout, calculate scores and rankings
+      workouts.forEach(workout => {
+        // For each athlete, get their score for this workout
+        filteredAthletes.forEach(athlete => {
+          const athleteScore = workout.scores[athlete.id] || { score: '-', isValidated: false };
+          const athleteData = athleteMap.get(athlete.id);
+
+          if (athleteData) {
+            athleteData.workoutScores[workout.id] = {
+              score: athleteScore.score,
+              isValidated: athleteScore.isValidated,
+              workoutName: workout.name,
+              scoretype: workout.scoretype
+            };
+          }
+        });
+      });
+
+      // Convert map back to array
+      return Array.from(athleteMap.values()).map(athlete => ({
+        ...athlete,
+        scores: athlete.workoutScores
+      }));
+    }
+
+    // Handle single workout view (original functionality)
+    if (!activeWorkout || typeof activeWorkout !== 'number') return [];
+
     const currentWorkout = workouts.find(w => w.id === activeWorkout);
     if (!currentWorkout) return [];
 
-    const filteredAthletes = division === 'All' 
-      ? athletes 
+    const filteredAthletes = division === 'All'
+      ? athletes
       : athletes.filter(a => a.division === division);
-    
+
     return filteredAthletes.map(athlete => {
       const athleteScore = currentWorkout.scores[athlete.id] || { score: '-', isValidated: false };
       return {
@@ -214,7 +258,7 @@ const CrossfitLeaderboardApp = () => {
     }).sort((a, b) => {
       if (a.score === '-') return 1;
       if (b.score === '-') return -1;
-      
+
       if (currentWorkout.scoretype === 'time') {
         // For time: lower is better
         const timeA = a.score.split(':').reduce((acc: number, val: string) => acc * 60 + parseInt(val), 0);
@@ -242,19 +286,19 @@ const CrossfitLeaderboardApp = () => {
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-center">CrossFit Open Leaderboard</h1>
-      
+
       {/* Workout selection */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-xl font-semibold">Workouts</h2>
-          <button 
-            onClick={() => setShowAddWorkout(!showAddWorkout)} 
+          <button
+            onClick={() => setShowAddWorkout(!showAddWorkout)}
             className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
           >
             {showAddWorkout ? 'Cancel' : 'Add Workout'}
           </button>
         </div>
-        
+
         {showAddWorkout && (
           <div className="bg-gray-100 p-4 rounded mb-4">
             <h3 className="font-semibold mb-2">New Workout</h3>
@@ -283,7 +327,7 @@ const CrossfitLeaderboardApp = () => {
               className="p-2 border rounded w-full mb-4"
               rows={3}
             />
-            <button 
+            <button
               onClick={handleAddWorkout}
               className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
               disabled={!newWorkout.name}
@@ -292,17 +336,26 @@ const CrossfitLeaderboardApp = () => {
             </button>
           </div>
         )}
-        
+
         <div className="flex overflow-x-auto space-x-2 pb-2">
+          <button
+            onClick={() => setActiveWorkout('all')}
+            className={`px-4 py-2 rounded whitespace-nowrap ${activeWorkout === 'all'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+          >
+            All Workouts
+          </button>
           {workouts.map(workout => (
             <div key={workout.id} className="flex items-center space-x-2">
               <button
                 onClick={() => setActiveWorkout(workout.id)}
                 className={`px-4 py-2 rounded whitespace-nowrap ${
-                  activeWorkout === workout.id 
-                    ? 'bg-blue-500 text-white' 
+                  activeWorkout === workout.id
+                    ? 'bg-blue-500 text-white'
                     : 'bg-gray-200 hover:bg-gray-300'
-                }`}
+                  }`}
               >
                 {workout.name}
               </button>
@@ -319,9 +372,9 @@ const CrossfitLeaderboardApp = () => {
           ))}
         </div>
       </div>
-      
+
       {/* Current workout details */}
-      {activeWorkout && (
+      {activeWorkout && activeWorkout !== 'all' && (
         <div className="mb-6 bg-gray-50 p-4 rounded">
           <h2 className="text-xl font-semibold mb-2">
             {workouts.find(w => w.id === activeWorkout)?.name}
@@ -330,15 +383,25 @@ const CrossfitLeaderboardApp = () => {
             {workouts.find(w => w.id === activeWorkout)?.description}
           </p>
           <p className="text-sm text-gray-600">
-            Score type: {workouts.find(w => w.id === activeWorkout)?.scoretype === 'time' 
-              ? 'Time (lower is better)' 
+            Score type: {workouts.find(w => w.id === activeWorkout)?.scoretype === 'time'
+              ? 'Time (lower is better)'
               : workouts.find(w => w.id === activeWorkout)?.scoretype === 'reps'
                 ? 'Repetitions (higher is better)'
                 : 'Weight (higher is better)'}
           </p>
         </div>
       )}
-      
+
+      {/* All Workouts view */}
+      {activeWorkout === 'all' && (
+        <div className="mb-6 bg-gray-50 p-4 rounded">
+          <h2 className="text-xl font-semibold mb-2">All Workouts Overview</h2>
+          <p className="mb-2">
+            Viewing scores across all workouts for {division === 'All' ? 'all divisions' : `the ${division} division`}.
+          </p>
+        </div>
+      )}
+
       {showEditWorkout && editingWorkout && (
         <div className="bg-gray-100 p-4 rounded mb-4 mt-4">
           <h3 className="font-semibold mb-2">Edit Workout</h3>
@@ -368,14 +431,14 @@ const CrossfitLeaderboardApp = () => {
             rows={3}
           />
           <div className="flex space-x-2">
-            <button 
+            <button
               onClick={handleEditWorkout}
               className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
               disabled={!editingWorkout.name}
             >
               Save Changes
             </button>
-            <button 
+            <button
               onClick={() => {
                 setShowEditWorkout(false);
                 setEditingWorkout(null);
@@ -387,19 +450,19 @@ const CrossfitLeaderboardApp = () => {
           </div>
         </div>
       )}
-      
+
       {/* Division filter */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-xl font-semibold">Athletes</h2>
-          <button 
-            onClick={() => setShowAddAthlete(!showAddAthlete)} 
+          <button
+            onClick={() => setShowAddAthlete(!showAddAthlete)}
             className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
           >
             {showAddAthlete ? 'Cancel' : 'Add Athlete'}
           </button>
         </div>
-        
+
         {showAddAthlete && (
           <div className="bg-gray-100 p-4 rounded mb-4">
             <h3 className="font-semibold mb-2">New Athlete</h3>
@@ -437,7 +500,7 @@ const CrossfitLeaderboardApp = () => {
                 <option value="F">Female</option>
               </select>
             </div>
-            <button 
+            <button
               onClick={handleAddAthlete}
               className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
               disabled={!newAthlete.name}
@@ -446,7 +509,7 @@ const CrossfitLeaderboardApp = () => {
             </button>
           </div>
         )}
-        
+
         <div className="flex space-x-2 mb-4">
           <button
             onClick={() => setDivision('All')}
@@ -474,66 +537,131 @@ const CrossfitLeaderboardApp = () => {
           </button>
         </div>
       </div>
-      
+
       {/* Leaderboard */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-2">Leaderboard</h2>
         {rankings.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-4 py-2 border">Rank</th>
-                  <th className="px-4 py-2 border text-left">Athlete</th>
-                  <th className="px-4 py-2 border">Division</th>
-                  <th className="px-4 py-2 border">Score</th>
-                  <th className="px-4 py-2 border">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rankings.map((athlete, index) => (
-                  <tr key={athlete.id} className={athlete.isValidated ? '' : 'bg-yellow-50'}>
-                    <td className="px-4 py-2 border text-center">{index + 1}</td>
-                    <td className="px-4 py-2 border">
-                      {athlete.name} 
-                      <span className="text-xs text-gray-500 ml-2">
-                        ({athlete.gender}, {athlete.age})
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 border text-center">{athlete.division}</td>
-                    <td className="px-4 py-2 border text-center font-semibold">{athlete.score}</td>
-                    <td className="px-4 py-2 border">
-                      <div className="flex justify-center space-x-2">
-                        <button 
-                          onClick={() => {
-                            const promptText = athlete.score === '-' ? 'Enter' : 'Update';
-                            const newScore = window.prompt(`${promptText} score for ${athlete.name}:`);
-                            if (newScore) {
-                              handleScoreSubmit(athlete.id, activeWorkout!, newScore);
-                            }
-                          }}
-                          className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                        >
-                          {athlete.score === '-' ? 'Add Score' : 'Update'}
-                        </button>
-                        {athlete.score !== '-' && (
-                          <button 
-                            onClick={() => toggleScoreValidation(athlete.id, activeWorkout!)}
-                            className={`px-2 py-1 rounded text-sm ${
-                              athlete.isValidated 
-                                ? 'bg-green-500 text-white hover:bg-green-600' 
-                                : 'bg-yellow-500 text-white hover:bg-yellow-600'
-                            }`}
-                          >
-                            {athlete.isValidated ? 'Validated' : 'Validate'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+            {activeWorkout !== 'all' ? (
+              // Single workout view
+              <table className="min-w-full bg-white border">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-2 border">Rank</th>
+                    <th className="px-4 py-2 border text-left">Athlete</th>
+                    <th className="px-4 py-2 border">Division</th>
+                    <th className="px-4 py-2 border">Score</th>
+                    <th className="px-4 py-2 border">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(rankings as AthleteWithScore[]).map((athlete, index) => (
+                    <tr key={athlete.id} className={athlete.isValidated ? '' : 'bg-yellow-50'}>
+                      <td className="px-4 py-2 border text-center">{index + 1}</td>
+                      <td className="px-4 py-2 border">
+                        {athlete.name}
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({athlete.gender}, {athlete.age})
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 border text-center">{athlete.division}</td>
+                      <td className="px-4 py-2 border text-center font-semibold">{athlete.score}</td>
+                      <td className="px-4 py-2 border">
+                        <div className="flex justify-center space-x-2">
+                          <button
+                            onClick={() => {
+                              const promptText = athlete.score === '-' ? 'Enter' : 'Update';
+                              const newScore = window.prompt(`${promptText} score for ${athlete.name}:`);
+                              if (newScore) {
+                                handleScoreSubmit(athlete.id, activeWorkout as number, newScore);
+                              }
+                            }}
+                            className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                          >
+                            {athlete.score === '-' ? 'Add Score' : 'Update'}
+                          </button>
+                          {athlete.score !== '-' && (
+                            <button
+                              onClick={() => toggleScoreValidation(athlete.id, activeWorkout as number)}
+                              className={`px-2 py-1 rounded text-sm ${
+                                athlete.isValidated
+                                  ? 'bg-green-500 text-white hover:bg-green-600'
+                                  : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                                }`}
+                            >
+                              {athlete.isValidated ? 'Validated' : 'Validate'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              // All workouts view
+              <table className="min-w-full bg-white border">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-2 border text-left">Athlete</th>
+                    <th className="px-4 py-2 border">Division</th>
+                    {workouts.map(workout => (
+                      <th key={workout.id} className="px-4 py-2 border">{workout.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(rankings as any[]).map((athlete) => (
+                    <tr key={athlete.id}>
+                      <td className="px-4 py-2 border">
+                        {athlete.name}
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({athlete.gender}, {athlete.age})
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 border text-center">{athlete.division}</td>
+                      {workouts.map(workout => {
+                        const score = athlete.scores[workout.id] || { score: '-', isValidated: false };
+                        return (
+                          <td
+                            key={workout.id}
+                            className={`px-4 py-2 border text-center ${score.isValidated ? '' : 'bg-yellow-50'}`}
+                          >
+                            <div className="font-semibold">{score.score}</div>
+                            <div className="flex justify-center space-x-2 mt-1">
+                              <button
+                                onClick={() => {
+                                  const promptText = score.score === '-' ? 'Enter' : 'Update';
+                                  const newScore = window.prompt(`${promptText} score for ${athlete.name} in ${workout.name}:`);
+                                  if (newScore) {
+                                    handleScoreSubmit(athlete.id, workout.id, newScore);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                              >
+                                {score.score === '-' ? 'Add' : 'Edit'}
+                              </button>
+                              {score.score !== '-' && (
+                                <button
+                                  onClick={() => toggleScoreValidation(athlete.id, workout.id)}
+                                  className={`px-2 py-1 rounded text-xs ${score.isValidated
+                                      ? 'bg-green-500 text-white hover:bg-green-600'
+                                      : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                                    }`}
+                                >
+                                  {score.isValidated ? 'V' : '!'}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         ) : (
           <div className="bg-gray-50 p-4 rounded text-center">
