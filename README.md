@@ -98,7 +98,6 @@ The application uses two main tables in Supabase:
 - name (text)
 - division (text: 'RX', 'Scaled', 'Masters', 'Teens')
 - gender (text: 'M', 'F')
-- age (integer)
 - created_at (timestamp)
 
 ### workouts

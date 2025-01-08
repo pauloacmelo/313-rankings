@@ -4,7 +4,6 @@ export interface Athlete {
   name: string;
   division: DivisionType;
   gender: GenderType;
-  age: number | string;
 }
 export type NewAthlete = Omit<Athlete, 'id'>;
 

@@ -28,7 +28,7 @@ const CrossfitLeaderboardApp = () => {
   const [showAddWorkout, setShowAddWorkout] = useState(false);
   const [showEditWorkout, setShowEditWorkout] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
-  const [newAthlete, setNewAthlete] = useState<NewAthlete>({ name: '', division: 'RX', age: '', gender: 'M' });
+  const [newAthlete, setNewAthlete] = useState<NewAthlete>({ name: '', division: 'RX', gender: 'M' });
   const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoretype: 'time', scores: [] });
   const [loading, setLoading] = useState(true);
 
@@ -110,16 +110,10 @@ const CrossfitLeaderboardApp = () => {
   // Handle adding a new athlete
   const handleAddAthlete = async () => {
     try {
-      // Parse age to number if it's a valid number
-      const parsedAthlete = {
-        ...newAthlete,
-        age: newAthlete.age ? parseInt(String(newAthlete.age)) : 0
-      };
-
-      const result = await addAthlete(parsedAthlete);
+      const result = await addAthlete(newAthlete);
       if (result) {
         // Realtime subscription will handle adding to the state
-        setNewAthlete({ name: '', division: 'RX', age: '', gender: 'M' });
+        setNewAthlete({ name: '', division: 'RX', gender: 'M' });
         setShowAddAthlete(false);
       }
     } catch (error) {
@@ -198,7 +192,7 @@ const CrossfitLeaderboardApp = () => {
       workouts.forEach(workout => {
         // For each athlete, get their score for this workout
         filteredAthletes.forEach(athlete => {
-          const athleteScore = workout.scores[athlete.id] || { score: '-' };
+          const athleteScore = workout.scores[athlete.id] || { score: null };
           const athleteData = athleteMap.get(athlete.id);
 
           if (athleteData) {
@@ -229,14 +223,14 @@ const CrossfitLeaderboardApp = () => {
       : athletes.filter(a => a.division === division);
 
     return filteredAthletes.map(athlete => {
-      const athleteScore = currentWorkout.scores[athlete.id] || { score: '-' };
+      const athleteScore = currentWorkout.scores[athlete.id] || { score: null };
       return {
         ...athlete,
         score: athleteScore.score
       };
     }).sort((a, b) => {
-      if (a.score === '-') return 1;
-      if (b.score === '-') return -1;
+      if (!a.score) return 1;
+      if (!b.score) return -1;
 
       if (currentWorkout.scoretype === 'time') {
         // For time: lower is better
@@ -467,13 +461,6 @@ const CrossfitLeaderboardApp = () => {
                 <option value="Masters">Masters</option>
                 <option value="Teens">Teens</option>
               </select>
-              <input
-                type="number"
-                placeholder="Age"
-                value={newAthlete.age}
-                onChange={(e) => setNewAthlete({...newAthlete, age: e.target.value})}
-                className="p-2 border rounded"
-              />
               <select
                 value={newAthlete.gender}
                 onChange={(e) => setNewAthlete({...newAthlete, gender: e.target.value as 'M' | 'F'})}
@@ -544,7 +531,7 @@ const CrossfitLeaderboardApp = () => {
                       <td className="px-4 py-2 border">
                         {athlete.name}
                         <span className="text-xs text-gray-500 ml-2">
-                          ({athlete.gender}, {athlete.age})
+                          ({athlete.gender})
                         </span>
                       </td>
                       <td className="px-4 py-2 border text-center">{athlete.division}</td>
@@ -583,26 +570,26 @@ const CrossfitLeaderboardApp = () => {
                 </thead>
                 <tbody>
                   {(rankings as any[]).map((athlete) => (
-                    <tr key={athlete.id}>
+                    <tr key={athlete.id} className={workouts.map(w => athlete.scores[w.id]?.score).every(Boolean) ? '' : 'bg-yellow-50'}>
                       <td className="px-4 py-2 border">
                         {athlete.name}
                         <span className="text-xs text-gray-500 ml-2">
-                          ({athlete.gender}, {athlete.age})
+                          ({athlete.gender})
                         </span>
                       </td>
                       <td className="px-4 py-2 border text-center">{athlete.division}</td>
                       {workouts.map(workout => {
-                        const score = athlete.scores[workout.id] || { score: '-' };
+                        const score = athlete.scores[workout.id] || { score: null };
                         return (
                           <td
                             key={workout.id}
-                            className="px-4 py-2 border text-center"
+                            className={`px-4 py-2 border text-center`}
                           >
-                            <div className="font-semibold">{score.score}</div>
+                            <div className="font-semibold">{score.score || '-'}</div>
                             <div className="flex justify-center space-x-2 mt-1">
                               <button
                                 onClick={() => {
-                                  const promptText = score.score === '-' ? 'Enter' : 'Update';
+                                  const promptText = score.score ? 'Update' : 'Enter';
                                   const newScore = window.prompt(`${promptText} score for ${athlete.name} in ${workout.name}:`);
                                   if (newScore) {
                                     handleScoreSubmit(athlete.id, workout.id, newScore);
@@ -610,7 +597,7 @@ const CrossfitLeaderboardApp = () => {
                                 }}
                                 className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
                               >
-                                {score.score === '-' ? 'Add' : 'Edit'}
+                                {score.score ? 'Edit' : 'Add'}
                               </button>
                             </div>
                           </td>

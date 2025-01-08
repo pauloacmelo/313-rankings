@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS public.athletes (
   name TEXT NOT NULL,
   division TEXT NOT NULL,
   gender TEXT NOT NULL,
-  age INT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -25,13 +24,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.athletes;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.workouts;
 
 -- Sample data for testing
-INSERT INTO public.athletes (name, division, gender, age)
+INSERT INTO public.athletes (name, division, gender)
 VALUES 
-  ('John Smith', 'RX', 'M', 28),
-  ('Sarah Johnson', 'RX', 'F', 32),
-  ('Mike Wilson', 'Scaled', 'M', 35),
-  ('Emily Chen', 'Scaled', 'F', 29),
-  ('Robert James', 'Masters', 'M', 47);
+  ('John Smith', 'RX', 'M'),
+  ('Sarah Johnson', 'RX', 'F'),
+  ('Mike Wilson', 'Scaled', 'M'),
+  ('Emily Chen', 'Scaled', 'F'),
+  ('Robert James', 'Masters', 'M');
 
 INSERT INTO public.workouts (name, description, scoretype, scores)
 VALUES 
