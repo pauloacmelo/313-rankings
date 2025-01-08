@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Athlete, Workout, NewAthlete, NewWorkout, Score } from './types';
+import { Athlete, Workout, NewAthlete, NewWorkout, Score, NewScore } from './types';
 
 // Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -87,38 +87,92 @@ export const updateWorkout = async (workout: Workout): Promise<Workout | null> =
 };
 
 // Scores API
-export const updateScore = async (workoutId: number, athleteId: number, score: Score) => {
-  // First get the current workout to access its scores
-  const { data: workoutData, error: workoutError } = await supabase
-    .from('workouts')
-    .select('scores')
-    .eq('id', workoutId)
-    .single();
+export const fetchScores = async () => {
+  const { data, error } = await supabase
+    .from('scores')
+    .select('*');
   
-  if (workoutError) {
-    console.error('Error fetching workout for score update:', workoutError);
-    return null;
+  if (error) {
+    console.error('Error fetching scores:', error);
+    return [];
   }
   
-  // Update the scores object
-  const updatedScores = {
-    ...workoutData.scores,
-    [athleteId]: score
-  };
-  
-  // Update the workout with new scores
+  return data as Score[];
+};
+
+export const fetchScoresByWorkout = async (workoutId: number) => {
   const { data, error } = await supabase
-    .from('workouts')
-    .update({ scores: updatedScores })
-    .eq('id', workoutId)
-    .select();
+    .from('scores')
+    .select('*')
+    .eq('workout_id', workoutId);
   
+  if (error) {
+    console.error('Error fetching scores for workout:', error);
+    return [];
+  }
+  
+  return data as Score[];
+};
+
+export const fetchScoresByAthlete = async (athleteId: number) => {
+  const { data, error } = await supabase
+    .from('scores')
+    .select('*')
+    .eq('athlete_id', athleteId);
+  
+  if (error) {
+    console.error('Error fetching scores for athlete:', error);
+    return [];
+  }
+  
+  return data as Score[];
+};
+
+export const addScore = async (newScore: NewScore): Promise<Score | null> => {
+  const { data, error } = await supabase
+    .from('scores')
+    .insert([newScore])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error adding score:', error);
+    return null;
+  }
+
+  return data;
+};
+
+export const updateScore = async (score: Score): Promise<Score | null> => {
+  const { data, error } = await supabase
+    .from('scores')
+    .update({
+      score: score.score
+    })
+    .eq('id', score.id)
+    .select()
+    .single();
+
   if (error) {
     console.error('Error updating score:', error);
     return null;
   }
-  
-  return data[0] as Workout;
+
+  return data;
+};
+
+export const deleteScore = async (scoreId: number): Promise<boolean> => {
+  const { error } = await supabase
+    .from('scores')
+    .delete()
+    .eq('id', scoreId);
+
+  if (error) {
+    console.error('Error deleting score:', error);
+    return false;
+  }
+
+  return true;
 };
 
 // Subscribe to real-time updates
@@ -140,6 +194,17 @@ export const subscribeToWorkouts = (callback: (payload: any) => void) => {
       event: '*',
       schema: 'public',
       table: 'workouts'
+    }, callback)
+    .subscribe();
+};
+
+export const subscribeToScores = (callback: (payload: any) => void) => {
+  return supabase
+    .channel('scores-changes')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'scores'
     }, callback)
     .subscribe();
 }; 

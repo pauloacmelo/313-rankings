@@ -16,9 +16,6 @@ export interface Workout {
   name: string;
   description: string;
   scoretype: ScoreType;
-  scores: {
-    [athleteId: number]: Score;
-  };
 }
 export type NewWorkout = Omit<Workout, 'id'>;
 
@@ -26,13 +23,16 @@ export type ScoreType = 'time' | 'reps' | 'weight';
 
 // Score-related types
 export interface Score {
+  id: number;
+  workout_id: number;
+  athlete_id: number;
   score: string;
 }
 export type NewScore = Omit<Score, 'id'>;
 
 // Rankings type
 export interface AthleteWithScore extends Athlete {
-  score: string;
+  score: string | null;
 }
 
 // Filter types

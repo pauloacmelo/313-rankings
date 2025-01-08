@@ -5,16 +5,22 @@ import {
   NewAthlete,
   NewWorkout,
   DivisionFilter,
-  AthleteWithScore
+  AthleteWithScore,
+  Score,
+  NewScore
 } from './types';
 import {
   fetchAthletes,
   fetchWorkouts,
+  fetchScores,
+  fetchScoresByWorkout,
   addAthlete,
   addWorkout,
+  addScore,
   updateScore,
   subscribeToAthletes,
   subscribeToWorkouts,
+  subscribeToScores,
   updateWorkout
 } from './supabaseClient';
 
@@ -22,6 +28,7 @@ const CrossfitLeaderboardApp = () => {
   // State management
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [scores, setScores] = useState<Score[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<number | null | 'all'>(null);
   const [division, setDivision] = useState<DivisionFilter>('All');
   const [showAddAthlete, setShowAddAthlete] = useState(false);
@@ -29,7 +36,7 @@ const CrossfitLeaderboardApp = () => {
   const [showEditWorkout, setShowEditWorkout] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
   const [newAthlete, setNewAthlete] = useState<NewAthlete>({ name: '', division: 'RX', gender: 'M' });
-  const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoretype: 'time', scores: [] });
+  const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoretype: 'time' });
   const [loading, setLoading] = useState(true);
 
   // Load data from Supabase
@@ -38,12 +45,14 @@ const CrossfitLeaderboardApp = () => {
       setLoading(true);
 
       try {
-        // Fetch athletes and workouts
+        // Fetch athletes, workouts, and scores
         const athletesData = await fetchAthletes();
         const workoutsData = await fetchWorkouts();
+        const scoresData = await fetchScores();
 
         setAthletes(athletesData);
         setWorkouts(workoutsData);
+        setScores(scoresData);
 
         // Set active workout to the first one if available
         if (workoutsData.length > 0 && !activeWorkout) {
@@ -100,10 +109,27 @@ const CrossfitLeaderboardApp = () => {
       }
     });
 
+    const scoresSubscription = subscribeToScores((payload) => {
+      if (payload.eventType === 'INSERT') {
+        setScores(prevScores => [...prevScores, payload.new as Score]);
+      } else if (payload.eventType === 'UPDATE') {
+        setScores(prevScores =>
+          prevScores.map(score =>
+            score.id === payload.new.id ? payload.new as Score : score
+          )
+        );
+      } else if (payload.eventType === 'DELETE') {
+        setScores(prevScores =>
+          prevScores.filter(score => score.id !== payload.old.id)
+        );
+      }
+    });
+
     // Clean up subscriptions
     return () => {
       athletesSubscription.unsubscribe();
       workoutsSubscription.unsubscribe();
+      scoresSubscription.unsubscribe();
     };
   }, []);
 
@@ -127,7 +153,7 @@ const CrossfitLeaderboardApp = () => {
       const result = await addWorkout(newWorkout);
       if (result) {
         // Realtime subscription will handle adding to the state
-        setNewWorkout({ name: '', description: '', scoretype: 'time', scores: [] });
+        setNewWorkout({ name: '', description: '', scoretype: 'time' });
         setShowAddWorkout(false);
         setActiveWorkout(result.id);
       }
@@ -159,9 +185,27 @@ const CrossfitLeaderboardApp = () => {
   };
 
   // Handle adding or updating a score
-  const handleScoreSubmit = async (athleteId: number, workoutId: number, score: string) => {
+  const handleScoreSubmit = async (athleteId: number, workoutId: number, scoreValue: string) => {
     try {
-      await updateScore(workoutId, athleteId, { score });
+      // Check if a score already exists for this athlete and workout
+      const existingScore = scores.find(
+        s => s.athlete_id === athleteId && s.workout_id === workoutId
+      );
+
+      if (existingScore) {
+        // Update existing score
+        await updateScore({
+          ...existingScore,
+          score: scoreValue
+        });
+      } else {
+        // Add new score
+        await addScore({
+          workout_id: workoutId,
+          athlete_id: athleteId,
+          score: scoreValue
+        });
+      }
       // Realtime subscription will handle updating the state
     } catch (error) {
       console.error('Error updating score:', error);
@@ -192,12 +236,15 @@ const CrossfitLeaderboardApp = () => {
       workouts.forEach(workout => {
         // For each athlete, get their score for this workout
         filteredAthletes.forEach(athlete => {
-          const athleteScore = workout.scores[athlete.id] || { score: null };
+          const athleteScore = scores.find(
+            s => s.athlete_id === athlete.id && s.workout_id === workout.id
+          );
+          
           const athleteData = athleteMap.get(athlete.id);
 
           if (athleteData) {
             athleteData.workoutScores[workout.id] = {
-              score: athleteScore.score,
+              score: athleteScore?.score || null,
               workoutName: workout.name,
               scoretype: workout.scoretype
             };
@@ -223,10 +270,13 @@ const CrossfitLeaderboardApp = () => {
       : athletes.filter(a => a.division === division);
 
     return filteredAthletes.map(athlete => {
-      const athleteScore = currentWorkout.scores[athlete.id] || { score: null };
+      const athleteScore = scores.find(
+        s => s.athlete_id === athlete.id && s.workout_id === activeWorkout
+      );
+      
       return {
         ...athlete,
-        score: athleteScore.score
+        score: athleteScore?.score || null
       };
     }).sort((a, b) => {
       if (!a.score) return 1;
@@ -535,12 +585,12 @@ const CrossfitLeaderboardApp = () => {
                         </span>
                       </td>
                       <td className="px-4 py-2 border text-center">{athlete.division}</td>
-                      <td className="px-4 py-2 border text-center font-semibold">{athlete.score}</td>
+                      <td className="px-4 py-2 border text-center font-semibold">{athlete.score || '-'}</td>
                       <td className="px-4 py-2 border">
                         <div className="flex justify-center space-x-2">
                           <button
                             onClick={() => {
-                              const promptText = athlete.score === '-' ? 'Enter' : 'Update';
+                              const promptText = athlete.score ? 'Update' : 'Enter';
                               const newScore = window.prompt(`${promptText} score for ${athlete.name}:`);
                               if (newScore) {
                                 handleScoreSubmit(athlete.id, activeWorkout as number, newScore);
@@ -548,7 +598,7 @@ const CrossfitLeaderboardApp = () => {
                             }}
                             className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
                           >
-                            {athlete.score === '-' ? 'Add Score' : 'Update'}
+                            {athlete.score ? 'Update' : 'Add Score'}
                           </button>
                         </div>
                       </td>
@@ -579,17 +629,19 @@ const CrossfitLeaderboardApp = () => {
                       </td>
                       <td className="px-4 py-2 border text-center">{athlete.division}</td>
                       {workouts.map(workout => {
-                        const score = athlete.scores[workout.id] || { score: null };
+                        const workoutScore = athlete.scores[workout.id] || { score: null };
                         return (
                           <td
                             key={workout.id}
                             className={`px-4 py-2 border text-center`}
                           >
-                            <div className="font-semibold">{score.score || '-'}</div>
+                            <div className="font-semibold">
+                              {workoutScore.score || '-'}
+                            </div>
                             <div className="flex justify-center space-x-2 mt-1">
                               <button
                                 onClick={() => {
-                                  const promptText = score.score ? 'Update' : 'Enter';
+                                  const promptText = workoutScore.score ? 'Update' : 'Enter';
                                   const newScore = window.prompt(`${promptText} score for ${athlete.name} in ${workout.name}:`);
                                   if (newScore) {
                                     handleScoreSubmit(athlete.id, workout.id, newScore);
@@ -597,7 +649,7 @@ const CrossfitLeaderboardApp = () => {
                                 }}
                                 className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
                               >
-                                {score.score ? 'Edit' : 'Add'}
+                                {workoutScore.score ? 'Edit' : 'Add'}
                               </button>
                             </div>
                           </td>
