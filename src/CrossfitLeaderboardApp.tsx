@@ -7,6 +7,15 @@ import {
   DivisionFilter,
   AthleteWithScore
 } from './types';
+import {
+  fetchAthletes,
+  fetchWorkouts,
+  addAthlete,
+  addWorkout,
+  updateScore,
+  subscribeToAthletes,
+  subscribeToWorkouts
+} from './supabaseClient';
 
 const CrossfitLeaderboardApp = () => {
   // State management
@@ -18,105 +27,145 @@ const CrossfitLeaderboardApp = () => {
   const [showAddWorkout, setShowAddWorkout] = useState(false);
   const [newAthlete, setNewAthlete] = useState<NewAthlete>({ name: '', division: 'RX', age: '', gender: 'M' });
   const [newWorkout, setNewWorkout] = useState<NewWorkout>({ name: '', description: '', scoreType: 'time' });
+  const [loading, setLoading] = useState(true);
 
-  // Load sample data
+  // Load data from Supabase
   useEffect(() => {
-    // Sample athletes
-    const sampleAthletes: Athlete[] = [
-      { id: 1, name: 'John Smith', division: 'RX', gender: 'M', age: 28 },
-      { id: 2, name: 'Sarah Johnson', division: 'RX', gender: 'F', age: 32 },
-      { id: 3, name: 'Mike Wilson', division: 'Scaled', gender: 'M', age: 35 },
-      { id: 4, name: 'Emily Chen', division: 'Scaled', gender: 'F', age: 29 },
-      { id: 5, name: 'Robert James', division: 'Masters', gender: 'M', age: 47 },
-    ];
-    
-    // Sample workouts
-    const sampleWorkouts: Workout[] = [
-      { 
-        id: 1, 
-        name: 'Open 25.1', 
-        description: '21-15-9 of Thrusters and Pull-ups', 
-        scoreType: 'time',
-        scores: {
-          1: { score: '7:32', isValidated: true },
-          2: { score: '8:15', isValidated: true },
-          3: { score: '9:45', isValidated: true },
-          4: { score: '10:12', isValidated: true },
-          5: { score: '11:30', isValidated: false },
+    const loadData = async () => {
+      setLoading(true);
+      
+      try {
+        // Fetch athletes and workouts
+        const athletesData = await fetchAthletes();
+        const workoutsData = await fetchWorkouts();
+        
+        setAthletes(athletesData);
+        setWorkouts(workoutsData);
+        
+        // Set active workout to the first one if available
+        if (workoutsData.length > 0 && !activeWorkout) {
+          setActiveWorkout(workoutsData[0].id);
         }
-      },
-      { 
-        id: 2, 
-        name: 'Open 25.2', 
-        description: 'AMRAP 12: 5 Deadlifts, 10 Box Jumps, 15 Wall Balls', 
-        scoreType: 'reps',
-        scores: {
-          1: { score: '345', isValidated: true },
-          2: { score: '326', isValidated: true },
-          3: { score: '287', isValidated: true },
-          4: { score: '273', isValidated: true },
-          5: { score: '265', isValidated: false },
-        }
-      },
-    ];
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    setAthletes(sampleAthletes);
-    setWorkouts(sampleWorkouts);
-    setActiveWorkout(1);
+    loadData();
+    
+    // Set up realtime subscriptions
+    const athletesSubscription = subscribeToAthletes((payload) => {
+      if (payload.eventType === 'INSERT') {
+        setAthletes(prevAthletes => [...prevAthletes, payload.new as Athlete]);
+      } else if (payload.eventType === 'UPDATE') {
+        setAthletes(prevAthletes => 
+          prevAthletes.map(athlete => 
+            athlete.id === payload.new.id ? payload.new as Athlete : athlete
+          )
+        );
+      } else if (payload.eventType === 'DELETE') {
+        setAthletes(prevAthletes => 
+          prevAthletes.filter(athlete => athlete.id !== payload.old.id)
+        );
+      }
+    });
+    
+    const workoutsSubscription = subscribeToWorkouts((payload) => {
+      if (payload.eventType === 'INSERT') {
+        setWorkouts(prevWorkouts => [...prevWorkouts, payload.new as Workout]);
+        // Set as active workout if it's the first one
+        if (!activeWorkout) {
+          setActiveWorkout(payload.new.id);
+        }
+      } else if (payload.eventType === 'UPDATE') {
+        setWorkouts(prevWorkouts => 
+          prevWorkouts.map(workout => 
+            workout.id === payload.new.id ? payload.new as Workout : workout
+          )
+        );
+      } else if (payload.eventType === 'DELETE') {
+        setWorkouts(prevWorkouts => 
+          prevWorkouts.filter(workout => workout.id !== payload.old.id)
+        );
+        // If active workout was deleted, set first available as active
+        if (activeWorkout === payload.old.id) {
+          const remainingWorkouts = workouts.filter(w => w.id !== payload.old.id);
+          setActiveWorkout(remainingWorkouts.length > 0 ? remainingWorkouts[0].id : null);
+        }
+      }
+    });
+    
+    // Clean up subscriptions
+    return () => {
+      athletesSubscription.unsubscribe();
+      workoutsSubscription.unsubscribe();
+    };
   }, []);
 
   // Handle adding a new athlete
-  const handleAddAthlete = () => {
-    const newId = athletes.length > 0 ? Math.max(...athletes.map(a => a.id)) + 1 : 1;
-    setAthletes([...athletes, { id: newId, ...newAthlete }]);
-    setNewAthlete({ name: '', division: 'RX', age: '', gender: 'M' });
-    setShowAddAthlete(false);
+  const handleAddAthlete = async () => {
+    try {
+      // Parse age to number if it's a valid number
+      const parsedAthlete = {
+        ...newAthlete,
+        age: newAthlete.age ? parseInt(newAthlete.age) : 0
+      };
+      
+      const result = await addAthlete(parsedAthlete);
+      if (result) {
+        // Realtime subscription will handle adding to the state
+        setNewAthlete({ name: '', division: 'RX', age: '', gender: 'M' });
+        setShowAddAthlete(false);
+      }
+    } catch (error) {
+      console.error('Error adding athlete:', error);
+    }
   };
 
   // Handle adding a new workout
-  const handleAddWorkout = () => {
-    const newId = workouts.length > 0 ? Math.max(...workouts.map(w => w.id)) + 1 : 1;
-    setWorkouts([...workouts, { id: newId, ...newWorkout, scores: {} }]);
-    setNewWorkout({ name: '', description: '', scoreType: 'time' });
-    setShowAddWorkout(false);
-    setActiveWorkout(newId);
+  const handleAddWorkout = async () => {
+    try {
+      const result = await addWorkout(newWorkout);
+      if (result) {
+        // Realtime subscription will handle adding to the state
+        setNewWorkout({ name: '', description: '', scoreType: 'time' });
+        setShowAddWorkout(false);
+        setActiveWorkout(result.id);
+      }
+    } catch (error) {
+      console.error('Error adding workout:', error);
+    }
   };
 
   // Handle adding or updating a score
-  const handleScoreSubmit = (athleteId: number, workoutId: number, score: string) => {
-    const updatedWorkouts = workouts.map(workout => {
-      if (workout.id === workoutId) {
-        return {
-          ...workout,
-          scores: {
-            ...workout.scores,
-            [athleteId]: { score, isValidated: false }
-          }
-        };
-      }
-      return workout;
-    });
-    setWorkouts(updatedWorkouts);
+  const handleScoreSubmit = async (athleteId: number, workoutId: number, score: string) => {
+    try {
+      await updateScore(workoutId, athleteId, { score, isValidated: false });
+      // Realtime subscription will handle updating the state
+    } catch (error) {
+      console.error('Error updating score:', error);
+    }
   };
 
   // Handle score validation
-  const toggleScoreValidation = (athleteId: number, workoutId: number) => {
-    const updatedWorkouts = workouts.map(workout => {
-      if (workout.id === workoutId && workout.scores[athleteId]) {
-        return {
-          ...workout,
-          scores: {
-            ...workout.scores,
-            [athleteId]: { 
-              ...workout.scores[athleteId],
-              isValidated: !workout.scores[athleteId].isValidated 
-            }
-          }
-        };
-      }
-      return workout;
-    });
-    setWorkouts(updatedWorkouts);
+  const toggleScoreValidation = async (athleteId: number, workoutId: number) => {
+    const currentWorkout = workouts.find(w => w.id === workoutId);
+    if (!currentWorkout || !currentWorkout.scores[athleteId]) return;
+    
+    const currentScore = currentWorkout.scores[athleteId];
+    const updatedScore = {
+      ...currentScore,
+      isValidated: !currentScore.isValidated
+    };
+    
+    try {
+      await updateScore(workoutId, athleteId, updatedScore);
+      // Realtime subscription will handle updating the state
+    } catch (error) {
+      console.error('Error toggling score validation:', error);
+    }
   };
 
   // Calculate rankings for the current workout
@@ -154,6 +203,16 @@ const CrossfitLeaderboardApp = () => {
   };
 
   const rankings = calculateRankings();
+
+  // Display loading state
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="ml-2">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
@@ -202,6 +261,7 @@ const CrossfitLeaderboardApp = () => {
             <button 
               onClick={handleAddWorkout}
               className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              disabled={!newWorkout.name}
             >
               Save Workout
             </button>
@@ -296,6 +356,7 @@ const CrossfitLeaderboardApp = () => {
             <button 
               onClick={handleAddAthlete}
               className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              disabled={!newAthlete.name}
             >
               Save Athlete
             </button>
@@ -333,62 +394,68 @@ const CrossfitLeaderboardApp = () => {
       {/* Leaderboard */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-2">Leaderboard</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-4 py-2 border">Rank</th>
-                <th className="px-4 py-2 border text-left">Athlete</th>
-                <th className="px-4 py-2 border">Division</th>
-                <th className="px-4 py-2 border">Score</th>
-                <th className="px-4 py-2 border">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rankings.map((athlete, index) => (
-                <tr key={athlete.id} className={athlete.isValidated ? '' : 'bg-yellow-50'}>
-                  <td className="px-4 py-2 border text-center">{index + 1}</td>
-                  <td className="px-4 py-2 border">
-                    {athlete.name} 
-                    <span className="text-xs text-gray-500 ml-2">
-                      ({athlete.gender}, {athlete.age})
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 border text-center">{athlete.division}</td>
-                  <td className="px-4 py-2 border text-center font-semibold">{athlete.score}</td>
-                  <td className="px-4 py-2 border">
-                    <div className="flex justify-center space-x-2">
-                      <button 
-                        onClick={() => {
-                          const promptText = athlete.score === '-' ? 'Enter' : 'Update';
-                          const newScore = window.prompt(`${promptText} score for ${athlete.name}:`);
-                          if (newScore) {
-                            handleScoreSubmit(athlete.id, activeWorkout!, newScore);
-                          }
-                        }}
-                        className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                      >
-                        {athlete.score === '-' ? 'Add Score' : 'Update'}
-                      </button>
-                      {athlete.score !== '-' && (
-                        <button 
-                          onClick={() => toggleScoreValidation(athlete.id, activeWorkout!)}
-                          className={`px-2 py-1 rounded text-sm ${
-                            athlete.isValidated 
-                              ? 'bg-green-500 text-white hover:bg-green-600' 
-                              : 'bg-yellow-500 text-white hover:bg-yellow-600'
-                          }`}
-                        >
-                          {athlete.isValidated ? 'Validated' : 'Validate'}
-                        </button>
-                      )}
-                    </div>
-                  </td>
+        {rankings.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white border">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-4 py-2 border">Rank</th>
+                  <th className="px-4 py-2 border text-left">Athlete</th>
+                  <th className="px-4 py-2 border">Division</th>
+                  <th className="px-4 py-2 border">Score</th>
+                  <th className="px-4 py-2 border">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rankings.map((athlete, index) => (
+                  <tr key={athlete.id} className={athlete.isValidated ? '' : 'bg-yellow-50'}>
+                    <td className="px-4 py-2 border text-center">{index + 1}</td>
+                    <td className="px-4 py-2 border">
+                      {athlete.name} 
+                      <span className="text-xs text-gray-500 ml-2">
+                        ({athlete.gender}, {athlete.age})
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 border text-center">{athlete.division}</td>
+                    <td className="px-4 py-2 border text-center font-semibold">{athlete.score}</td>
+                    <td className="px-4 py-2 border">
+                      <div className="flex justify-center space-x-2">
+                        <button 
+                          onClick={() => {
+                            const promptText = athlete.score === '-' ? 'Enter' : 'Update';
+                            const newScore = window.prompt(`${promptText} score for ${athlete.name}:`);
+                            if (newScore) {
+                              handleScoreSubmit(athlete.id, activeWorkout!, newScore);
+                            }
+                          }}
+                          className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                        >
+                          {athlete.score === '-' ? 'Add Score' : 'Update'}
+                        </button>
+                        {athlete.score !== '-' && (
+                          <button 
+                            onClick={() => toggleScoreValidation(athlete.id, activeWorkout!)}
+                            className={`px-2 py-1 rounded text-sm ${
+                              athlete.isValidated 
+                                ? 'bg-green-500 text-white hover:bg-green-600' 
+                                : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                            }`}
+                          >
+                            {athlete.isValidated ? 'Validated' : 'Validate'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="bg-gray-50 p-4 rounded text-center">
+            {activeWorkout ? 'No athletes found for the selected division.' : 'No workout selected.'}
+          </div>
+        )}
       </div>
     </div>
   );
